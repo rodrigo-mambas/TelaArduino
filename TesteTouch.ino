@@ -1,48 +1,37 @@
-// Teste de touch screen para OpenSmart 3.5" ST7793 + Arduino Mega 2560
-//
-// COMO USAR:
-// 1. Sobe o sketch
-// 2. Abre Serial Monitor (115200 baud)
-// 3. Toca a tela e observa o que imprime no Serial
-// 4. Ajuste os #define TOUCH_* se necessario
+// Diagnostico de touch: descobre automaticamente quais pinos respondem ao toque.
+// Monitora pinos D2-D13 e A0-A5. Abre Serial Monitor 115200 e toca a tela.
+// O pino que mudar de estado quando tocado e o pino de touch.
 
 #include <Adafruit_GFX.h>
 #include <MCUFRIEND_kbv.h>
 
 MCUFRIEND_kbv tft;
+#define BLACK  0x0000
+#define WHITE  0xFFFF
+#define GREEN  0x07E0
+#define YELLOW 0xFFE0
 
-#define BLACK   0x0000
-#define WHITE   0xFFFF
-#define GREEN   0x07E0
-#define RED     0xF800
-#define YELLOW  0xFFE0
-#define CYAN    0x07FF
+// Pinos a monitorar (exclui os ja usados pelo display: D2-D9, A0-A4)
+// Monitoramos os que SOBRAM livres no Mega
+const uint8_t PINOS[] = {
+  10, 11, 12, 13,        // digitais livres
+  14, 15, 16, 17,        // D14-D17 (TX3/RX3/TX2/RX2 - livres se nao usar serial)
+  A5, A6, A7, A8,        // analogicos livres
+  A9, A10, A11, A12,
+  A13, A14, A15
+};
+const uint8_t N_PINOS = sizeof(PINOS) / sizeof(PINOS[0]);
 
-// ============================================================
-// PINOS DE TOUCH - ajuste aqui se nao detectar corretamente
-// Os pinos compartilham as linhas de dados do display.
-// Mapeamento padrao OpenSmart 3.5" 8-bit ST7793:
-#define TOUCH_YP   9    // Y+ compartilha com DB1
-#define TOUCH_XM   2    // X- compartilha com DB2
-#define TOUCH_XP   6    // X+ compartilha com DB6
-#define TOUCH_YM   7    // Y- compartilha com DB7
-// ============================================================
-
-// Limiar: quantas leituras LOW consecutivas para confirmar toque
-#define AMOSTRAS   5
-#define LIMIAR_MIN 3   // minimo de amostras positivas para confirmar
-
-int contadorToque = 0;
-bool tocando      = false;
+uint8_t estadoAnterior[sizeof(PINOS) / sizeof(PINOS[0])];
+bool qualquerMudanca = false;
+unsigned long ultimaImpressao = 0;
 
 void setup() {
   Serial.begin(115200);
-  Serial.println(F("=== Teste Touch OpenSmart 3.5 (ST7793) ==="));
-  Serial.println(F("Pinos configurados:"));
-  Serial.print(F("  YP (Y+) = D")); Serial.println(TOUCH_YP);
-  Serial.print(F("  XM (X-) = D")); Serial.println(TOUCH_XM);
-  Serial.print(F("  XP (X+) = D")); Serial.println(TOUCH_XP);
-  Serial.print(F("  YM (Y-) = D")); Serial.println(TOUCH_YM);
+  Serial.println(F("=== Scanner de Pinos de Touch ==="));
+  Serial.println(F("Configure todos os pinos monitorados como INPUT_PULLUP"));
+  Serial.println(F("e observe qual muda quando voce toca a tela."));
+  Serial.println();
 
   // Inicializa display
   uint16_t id = tft.readID();
@@ -50,108 +39,61 @@ void setup() {
   tft.begin(id);
   tft.setRotation(1);
   tft.fillScreen(BLACK);
+  tft.setTextColor(WHITE);
+  tft.setTextSize(2);
+  tft.setCursor(10, 10);
+  tft.print(F("Toque a tela"));
+  tft.setCursor(10, 40);
+  tft.print(F("Veja Serial Monitor"));
 
-  drawEstado(false);
+  // Configura todos os pinos monitorados como INPUT_PULLUP
+  for (uint8_t i = 0; i < N_PINOS; i++) {
+    pinMode(PINOS[i], INPUT_PULLUP);
+    estadoAnterior[i] = digitalRead(PINOS[i]);
+  }
+
+  Serial.println(F("Pinos monitorados | Estado inicial:"));
+  for (uint8_t i = 0; i < N_PINOS; i++) {
+    Serial.print(F("  D/A")); Serial.print(PINOS[i]);
+    Serial.print(F(" = ")); Serial.println(estadoAnterior[i] == LOW ? F("LOW") : F("HIGH"));
+  }
+  Serial.println(F(""));
+  Serial.println(F(">>> TOQUE A TELA E OBSERVE <<<"));
+  Serial.println(F("------------------------------"));
 }
 
 void loop() {
-  // Acumula amostras para confirmar toque (evita ruido)
-  int positivas = 0;
-  for (int i = 0; i < AMOSTRAS; i++) {
-    if (lerToque()) positivas++;
-    delayMicroseconds(500);
-  }
+  // Le estado atual de todos os pinos
+  for (uint8_t i = 0; i < N_PINOS; i++) {
+    uint8_t estadoAtual = digitalRead(PINOS[i]);
 
-  bool toqueAtual = (positivas >= LIMIAR_MIN);
+    if (estadoAtual != estadoAnterior[i]) {
+      Serial.print(F("*** MUDANCA no pino D"));
+      Serial.print(PINOS[i]);
+      Serial.print(F(": "));
+      Serial.print(estadoAnterior[i] == LOW ? F("LOW") : F("HIGH"));
+      Serial.print(F(" -> "));
+      Serial.println(estadoAtual == LOW ? F("LOW (PUXADO) ***") : F("HIGH (SOLTO) ***"));
 
-  // Borda de subida: novo toque detectado
-  if (toqueAtual && !tocando) {
-    contadorToque++;
-    tocando = true;
+      estadoAnterior[i] = estadoAtual;
+      qualquerMudanca = true;
 
-    Serial.print(F("[TOQUE #")); Serial.print(contadorToque);
-    Serial.print(F("] amostras positivas: ")); Serial.print(positivas);
-    Serial.print(F("/")); Serial.println(AMOSTRAS);
-
-    drawEstado(true);
-    testarVariacaoTensao();
-  }
-
-  // Borda de descida: dedo levantado
-  if (!toqueAtual && tocando) {
-    tocando = false;
-    Serial.println(F("[DEDO LEVANTADO]"));
-    drawEstado(false);
-  }
-
-  delay(20);
-}
-
-// ============================================================
-bool lerToque() {
-  // Aplica tensao no eixo Y e le o eixo X para detectar contato
-  pinMode(TOUCH_YM, OUTPUT);  digitalWrite(TOUCH_YM, LOW);
-  pinMode(TOUCH_XP, INPUT);
-  pinMode(TOUCH_XM, INPUT);
-  pinMode(TOUCH_YP, INPUT_PULLUP);
-  delayMicroseconds(30);
-  bool resultado = (digitalRead(TOUCH_YP) == LOW);
-
-  // Restaura pinos para OUTPUT antes do display assumir controle
-  pinMode(TOUCH_YP, OUTPUT);
-  pinMode(TOUCH_YM, OUTPUT);
-  pinMode(TOUCH_XP, OUTPUT);
-  pinMode(TOUCH_XM, OUTPUT);
-  return resultado;
-}
-
-// Verifica os 4 eixos possiveis para ajudar a identificar pinos corretos
-void testarVariacaoTensao() {
-  Serial.println(F("--- Diagnostico de eixos ---"));
-
-  // Eixo YP/YM
-  Serial.print(F("  YP pullup, YM=LOW -> YP="));
-  pinMode(TOUCH_YM, OUTPUT); digitalWrite(TOUCH_YM, LOW);
-  pinMode(TOUCH_XP, INPUT);  pinMode(TOUCH_XM, INPUT);
-  pinMode(TOUCH_YP, INPUT_PULLUP); delayMicroseconds(50);
-  Serial.println(digitalRead(TOUCH_YP) == LOW ? F("LOW (contato!)") : F("HIGH (sem contato)"));
-
-  // Eixo XP/XM
-  Serial.print(F("  XP pullup, XM=LOW -> XP="));
-  pinMode(TOUCH_XM, OUTPUT); digitalWrite(TOUCH_XM, LOW);
-  pinMode(TOUCH_YP, INPUT);  pinMode(TOUCH_YM, INPUT);
-  pinMode(TOUCH_XP, INPUT_PULLUP); delayMicroseconds(50);
-  Serial.println(digitalRead(TOUCH_XP) == LOW ? F("LOW (contato!)") : F("HIGH (sem contato)"));
-
-  // Restaura
-  pinMode(TOUCH_YP, OUTPUT); pinMode(TOUCH_YM, OUTPUT);
-  pinMode(TOUCH_XP, OUTPUT); pinMode(TOUCH_XM, OUTPUT);
-  Serial.println(F("----------------------------"));
-}
-
-void drawEstado(bool tocado) {
-  tft.fillScreen(BLACK);
-  tft.setTextSize(3);
-
-  if (tocado) {
-    tft.fillScreen(GREEN);
-    tft.setTextColor(BLACK);
-    tft.setCursor(80, 80);
-    tft.println(F("TOCADO!"));
-    tft.setTextSize(2);
-    tft.setCursor(60, 130);
-    tft.print(F("Contagem: ")); tft.println(contadorToque);
-  } else {
-    tft.setTextColor(WHITE);
-    tft.setCursor(30, 80);
-    tft.println(F("Toque a tela..."));
-    tft.setTextSize(2);
-    tft.setTextColor(YELLOW);
-    tft.setCursor(20, 140);
-    tft.println(F("Serial: 115200 baud"));
-    if (contadorToque > 0) {
-      tft.setCursor(20, 170);
-      tft.print(F("Ultimo toque: #")); tft.println(contadorToque);
+      // Pisca a tela verde quando detecta mudanca
+      tft.fillRect(0, 100, 400, 60, GREEN);
+      tft.setTextColor(BLACK);
+      tft.setTextSize(3);
+      tft.setCursor(20, 115);
+      tft.print(F("D")); tft.print(PINOS[i]); tft.print(F(" mudou!"));
     }
   }
+
+  // A cada 5 segundos imprime status resumido no serial
+  if (millis() - ultimaImpressao > 5000) {
+    ultimaImpressao = millis();
+    if (!qualquerMudanca) {
+      Serial.println(F("(aguardando mudanca nos pinos... toque a tela)"));
+    }
+  }
+
+  delay(10);
 }
