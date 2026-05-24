@@ -1,0 +1,49 @@
+=== Scanner dD/A69 = HIGH
+
+>>> TOQUE A TELA E OBSERVE <<<
+------------------------------
+(aguardando mudanca nos pinos... toque a tela)
+D/A69 = HIGH
+
+>>> TOQUE A TELA E OBSERVE <<<
+------------------------------
+(aguardando mudanca nos pinos... toque a tela)
+=== Scanner de Pinos de Touch ===
+Configure todos os pinos monitorados como INPUT_PULLUP
+e observe qual muda quando voce toca a tela.
+
+Pinos monitorados | Estado inicial:
+  D/A10 = HIGH
+  D/A11 = HIGH
+  D/A12 = HIGH
+  D/A13 = LOW
+  D/A14 = HIGH
+  D/A15 = HIGH
+  D/A16 = HIGH
+  D/A17 = HIGH
+  D/A59 = HIGH
+  D/A60 = HIGH
+  D/A61 = HIGH
+  D/A62 = HIGH
+  D/A63 = HIGH
+  D/A64 = HIGH
+  D/A65 = HIGH
+  D/A66 = HIGH
+  D/A67 = HIGH
+  D/A68 = HIGH
+  D/A69 = HIGH
+
+>>> TOQUE A TELA E OBSERVE <<<
+------------------------------
+(aguardando mudanca nos pinos... toque a tela)
+(aguardando mudanca nos pinos... toque a tela)
+(aguardando mudanca nos pinos... toque a tela)
+(aguardando mudanca nos pinos... toque a tela)
+(aguardando mudanca nos pinos... toque a tela)
+(aguardando mudanca nos pinos... toque a tela)
+(aguardando mudanca nos pinos... toque a tela)
+(aguardando mudanca nos pinos... toque a tela)
+(aguardando mudanca nos pinos... toque a tela)
+(aguardando mudanca nos pinos... toque a tela)
+(aguardando mudanca nos pinos... toque a tela)
+(aguardando mudanca nos pinos... toque a tela)
